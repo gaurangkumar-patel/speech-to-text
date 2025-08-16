@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Speech to Text — Multi‑Language</title>
+    <link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body>
+    <div class="wrap">
+        <header>
+            <div class="brand">
+                <div class="logo" aria-hidden="true"></div>
+                <div class="title">Speech to Text</div>
+            </div>
+            <div class="toolbar">
+                <label class="hidden" for="lang">Language</label>
+                <select id="lang" title="Select language">
+                    <option value="en-US" selected>English (US)</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="hi-IN">हिन्दी (India)</option>
+                    <option value="gu-IN">ગુજરાતી (India)</option>
+                    <option value="ur-PK">اردو (Pakistan)</option>
+                    <option value="bn-IN">বাংলা (India)</option>
+                    <option value="pa-IN">ਪੰਜਾਬੀ (India)</option>
+                    <option value="ta-IN">தமிழ் (India)</option>
+                    <option value="te-IN">తెలుగు (India)</option>
+                    <option value="mr-IN">मराठी (India)</option>
+                    <option value="es-ES">Español (Spain)</option>
+                    <option value="fr-FR">Français (France)</option>
+                    <option value="de-DE">Deutsch (Germany)</option>
+                    <option value="ar-SA">العربية (Saudi Arabia)</option>
+                    <option value="zh-CN">中文 (简体)</option>
+                    <option value="ja-JP">日本語 (Japan)</option>
+                </select>
+            </div>
+        </header>
+
+        <main>
+            <div class="controls">
+                <button id="mic" class="mic-btn" type="button" aria-pressed="false">
+                    <span class="mic-icon" aria-hidden="true">🎙️</span>
+                    <span id="micLabel">Start Listening</span>
+                </button>
+                <div id="status" class="status">Select language and click Start. Speaking will appear live below.</div>
+            </div>
+
+            <div id="output" class="output" role="region" aria-live="polite" aria-label="Transcription output"></div>
+
+            <div class="footer">
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                    <button id="copy" class="copy-btn" type="button">Copy Text</button>
+                    <button id="clear" class="clear-btn" type="button">Clear Text</button>
+                </div>
+                <div class="note">Tip: You can pause/resume by clicking the <span class="kbd">Start/Stop</span> button
+                    anytime.</div>
+            </div>
+        </main>
+
+        <p class="note" style="margin-top:10px" id="supportMsg"></p>
+    </div>
+
+    <script>
+        (function () {
+            const langSel = document.getElementById('lang');
+            const micBtn = document.getElementById('mic');
+            const micLabel = document.getElementById('micLabel');
+            const statusEl = document.getElementById('status');
+            const outputEl = document.getElementById('output');
+            const copyBtn = document.getElementById('copy');
+            const clearBtn = document.getElementById('clear');
+            const supportMsg = document.getElementById('supportMsg');
+
+            let recognition = null;
+            let listening = false;
+            let finalTranscript = '';
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                supportMsg.innerHTML = "Your browser doesn't support the Web Speech API. Try the latest Chrome/Edge on desktop or Android.";
+                micBtn.disabled = true;
+                micBtn.style.opacity = .6;
+                return;
+            } else {
+                supportMsg.textContent = "";
+            }
+
+            function createRecognition() {
+                if (recognition) {
+                    recognition.onresult = null;
+                    recognition.onerror = null;
+                    recognition.onend = null;
+                    recognition.abort();
+                }
+                recognition = new SpeechRecognition();
+                recognition.lang = langSel.value || 'en-US';
+                recognition.interimResults = true;
+                recognition.continuous = true;
+
+                recognition.onstart = () => {
+                    statusEl.textContent = `Listening… (${recognition.lang})`;
+                    micBtn.classList.add('listening');
+                    micBtn.setAttribute('aria-pressed', 'true');
+                    micLabel.textContent = 'Stop Listening';
+                };
+
+                recognition.onresult = (event) => {
+                    let interim = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const res = event.results[i];
+                        const text = res[0].transcript;
+                        if (res.isFinal) {
+                            finalTranscript += text + ' ';
+                        } else {
+                            interim += text;
+                        }
+                    }
+                    outputEl.textContent = (finalTranscript + interim).trimStart();
+                };
+
+                recognition.onerror = (event) => {
+                    const { error } = event;
+                    if (error === 'no-speech') {
+                        statusEl.textContent = 'No speech detected. Try again.';
+                    } else if (error === 'audio-capture') {
+                        statusEl.textContent = 'No microphone found or permission denied.';
+                    } else if (error === 'not-allowed') {
+                        statusEl.textContent = 'Microphone permission blocked. Allow access and retry.';
+                    } else {
+                        statusEl.textContent = `Error: ${error}`;
+                    }
+                    stopListening(false);
+                };
+
+                recognition.onend = () => {
+                    if (listening) {
+                        try { recognition.start(); } catch (_) { }
+                    } else {
+                        micBtn.classList.remove('listening');
+                        micBtn.setAttribute('aria-pressed', 'false');
+                        micLabel.textContent = 'Start Listening';
+                        statusEl.textContent = 'Stopped.';
+                    }
+                };
+            }
+
+            function startListening() {
+                if (!recognition) createRecognition();
+                finalTranscript = outputEl.textContent ? outputEl.textContent + ' ' : '';
+                listening = true;
+                try { recognition.start(); } catch (_) { }
+            }
+
+            function stopListening(updateUI = true) {
+                listening = false;
+                if (recognition) {
+                    try { recognition.stop(); } catch (_) { }
+                }
+                if (updateUI) {
+                    micBtn.classList.remove('listening');
+                    micBtn.setAttribute('aria-pressed', 'false');
+                    micLabel.textContent = 'Start Listening';
+                }
+            }
+
+            micBtn.addEventListener('click', () => {
+                if (listening) { stopListening(); }
+                else { startListening(); }
+            });
+
+            langSel.addEventListener('change', () => {
+                const wasListening = listening;
+                stopListening(false);
+                createRecognition();
+                if (wasListening) { startListening(); }
+                else { statusEl.textContent = `Language set to ${langSel.options[langSel.selectedIndex].text}.` }
+            });
+
+            copyBtn.addEventListener('click', async () => {
+                const text = outputEl.textContent.trim();
+                if (!text) {
+                    statusEl.textContent = 'Nothing to copy yet.';
+                    return;
+                }
+                try {
+                    await navigator.clipboard.writeText(text);
+                    statusEl.textContent = 'Copied to clipboard!';
+                } catch (err) {
+                    const ta = document.createElement('textarea');
+                    ta.value = text; document.body.appendChild(ta); ta.select();
+                    try { document.execCommand('copy'); statusEl.textContent = 'Copied to clipboard!'; }
+                    catch { statusEl.textContent = 'Copy failed. Select and copy manually.'; }
+                    finally { document.body.removeChild(ta); }
+                }
+            });
+
+            clearBtn.addEventListener('click', () => {
+                outputEl.textContent = '';
+                finalTranscript = '';
+                statusEl.textContent = 'Cleared text.';
+            });
+
+            createRecognition();
+        })();
+    </script>
+</body>
+
+</html>
